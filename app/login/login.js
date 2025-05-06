@@ -47,7 +47,7 @@ useEffect(() => {
     };
     saveData();
   }
-}, [session]);
+}, [session, router]);
 
 
 

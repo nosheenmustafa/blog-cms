@@ -38,7 +38,7 @@ const Add = () => {
     if (session) {
       checkAdmin();
     }
-  }, [session]);
+  }, [session, router]);
 
   const onSubmit = async (data) => {
     // console.log(data); // 👉 this will show your form data

@@ -54,7 +54,7 @@ const Edit = ({id, result}) => {
       // not logged in
       setTimeout(() => router.push("/blogs"), 2000)
     }
-  }, [session, status])
+  }, [session, status , router])
 //send the updated value to backend
 const onSubmit = async (data) => {
   setLoading(true);
