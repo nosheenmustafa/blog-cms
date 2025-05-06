@@ -1,142 +1,132 @@
 import { NextResponse } from 'next/server';
 import connectDB from '../../lib/db';
 import Blog from '@/app/models/blog';
-import fs from 'fs';
-import path from 'path';
-import { writeFile, mkdir } from 'fs/promises';
+import cloudinary from '@/lib/cloudinary';
 
-export const config = {
-  api:{
-    bodyParser:false
-  }
-}
-
+// ======================== POST ========================
 export async function POST(request) {
   await connectDB();
 
-  const formData = await request.formData(); // ✅ Correct method
+  const formData = await request.formData();
   const title = formData.get('title');
   const category = formData.get('category');
   const description = formData.get('description');
   const author = formData.get('author');
-  const file = formData.get('file'); // This will give you the uploaded file
+  const file = formData.get('file');
 
-
-  if(!file){
-    return NextResponse.json({success:false, message:"no image received"}, {status:201})
+  if (!file) {
+    return NextResponse.json({ success: false, message: "No image received" }, { status: 400 });
   }
 
-    const buffer = Buffer.from(await file.arrayBuffer()); //convert binary image into buffer so that we can save 
-    const filename = Date.now() + file.name.replaceAll(" ", "_");//create a unique name of file
-    const uploadPath = path.join(process.cwd(), "public/uploads");// told whre file will store
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const base64String = buffer.toString('base64');
+  const dataURI = `data:${file.type};base64,${base64String}`;
 
-    try {
-      await mkdir(uploadPath, { recursive: true });//make directory and recurive true means make a parent directory if not availbe
-    } catch (err) {
-      console.error("Error creating upload directory:", err);
-      return NextResponse.json({ error: "Failed to create upload directory.", details: err.message }, { status: 500 });
-    }
-
-    try {
-      const filePath = path.join(uploadPath, filename);// its the name of path including filename
-      await writeFile(filePath, buffer);
-    } catch (err) {
-      console.error("Error saving file:", err);
-      return NextResponse.json({ error: "Error saving file.", details: err.message }, { status: 500 });
-    }
-
-
-  // console.log("server is running");
-  // console.log("Title:", title);
-  // console.log("Category:", category);
-  // console.log("Description:", description);
-  // console.log("Author:", author);
-  // console.log("File:", file); 
+  let uploadedImage;
+  try {
+    uploadedImage = await cloudinary.uploader.upload(dataURI, {
+      folder: 'blogs',
+    });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: "Image upload failed", error: error.message }, { status: 500 });
+  }
 
   const blog = new Blog({
     title,
     category,
     description,
     author,
-    image: filename 
+    image: uploadedImage.secure_url,
+    imagePublicId: uploadedImage.public_id, // Save for later deletion
   });
 
   await blog.save();
 
-  return NextResponse.json({ success: true, message: "Blog saved in database" });
+  return NextResponse.json({ success: true, message: "Blog saved", blog });
 }
 
-
-
-//update any single blog using id
-export async function PUT(request){
+// ======================== PUT ========================
+export async function PUT(request) {
   await connectDB();
-    try{
-      const formData = await request.formData();
-      // console.log("form data for updating record in route side", formData);
-      const id = formData.get("id");
-      const title = formData.get("title");
-      // const author = formData.get("author");
-      const description = formData.get("description");
-      const file = formData.get("file");
-      const category = formData.get("category");
-      // console.log("id", id);
-      // console.log("title", title);
-      // console.log("category", category);
-      // console.log("file", file);
-      // console.log("description", description);
-     
-      //jo jo values updation ky liy availbe hn wo dal do 
-      const updateField ={};
-      if(title) updateField.title = title;
-      if(category) updateField.category = category;
-      if(description)  updateField.description = description;
-       
-      //for image update the process will be little different from textual data
-      if(file && file instanceof Blob){
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const filename = Date.now() + file.name.replaceAll("","-");
-        const uploadPath = path.join(process.cwd(), "public/uploads");
 
-        const filepath = path.join(uploadPath, filename);
-        try{
-          await fs.promises.mkdir(uploadPath, {recursive:true});
-        }
-        catch(error){
-         return NextResponse.json({error:"Failed to create the uploaded path",detail:error.message},{status:500})
-        }
+  try {
+    const formData = await request.formData();
+    const id = formData.get("id");
+    const title = formData.get("title");
+    const description = formData.get("description");
+    const category = formData.get("category");
+    const file = formData.get("file");
 
-        try{
-          await fs.promises.writeFile(filepath,buffer);
-          updateField.image = filename;
+    const blog = await Blog.findById(id);
+    if (!blog) {
+      return NextResponse.json({ success: false, message: "Blog not found" }, { status: 404 });
+    }
+
+    const updateFields = {};
+    if (title) updateFields.title = title;
+    if (category) updateFields.category = category;
+    if (description) updateFields.description = description;
+
+    // If new image is uploaded
+    if (file && file instanceof Blob) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const base64String = buffer.toString("base64");
+      const dataURI = `data:${file.type};base64,${base64String}`;
+
+      // Delete old image from Cloudinary
+      if (blog.imagePublicId) {
+        try {
+          await cloudinary.uploader.destroy(blog.imagePublicId);
+        } catch (err) {
+          console.warn("Failed to delete old image from Cloudinary:", err.message);
         }
-        catch(error){
-          return NextResponse.json({error:"Saving file", detail:error.message},{status:500})
-        }
-        const updateProduct = await Blog.findByIdAndUpdate(id, updateField,{new:true});
-        if(!updateProduct){
-          throw new Error('blog which you want to update not found');
-        }
-        return NextResponse.json({success:true, message:"data updated",data:updateProduct},{status:200})
+      }
+
+      const uploadedImage = await cloudinary.uploader.upload(dataURI, {
+        folder: "blogs",
+      });
+
+      updateFields.image = uploadedImage.secure_url;
+      updateFields.imagePublicId = uploadedImage.public_id;
+    }
+
+    const updatedBlog = await Blog.findByIdAndUpdate(id, updateFields, { new: true });
+
+    return NextResponse.json({ success: true, message: "Blog updated", data: updatedBlog });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: "Update failed", error: error.message }, { status: 500 });
+  }
+}
+
+// ======================== DELETE ========================
+export async function DELETE(request) {
+  await connectDB();
+
+  try {
+    const { id } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ success: false, message: "ID not provided" }, { status: 400 });
+    }
+
+    const blog = await Blog.findById(id);
+    if (!blog) {
+      return NextResponse.json({ success: false, message: "No blog found with that ID" }, { status: 404 });
+    }
+
+    // Delete Cloudinary image
+    if (blog.imagePublicId) {
+      try {
+        await cloudinary.uploader.destroy(blog.imagePublicId);
+      } catch (err) {
+        console.warn("Failed to delete image from Cloudinary:", err.message);
       }
     }
-    catch(error){
-        consoele.log("error somethind is there");
-        return NextResponse.json({success:false, message:"Error in updating the product", detail:error.message},{status:500})
-    }
-    return NextResponse.json({success:true, message:"data received"}, {status:200})
-}
 
+    await Blog.findByIdAndDelete(id);
 
-
-//delete the single blog logic goes hree
-export async function DELETE(request){
-  await connectDB();
- const id = await request.json();
- const findblog = await Blog.findByIdAndDelete(id);
- if(!findblog){
-  return NextResponse.json({success:false, message:"no blog found of that id to delete"},{status:500})
- }
- return NextResponse.json({success:true, message:"data deleted successfully"},{status:200})
- 
+    return NextResponse.json({ success: true, message: "Blog deleted successfully" }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json({ success: false, message: "Server error", detail: error.message }, { status: 500 });
+  }
 }

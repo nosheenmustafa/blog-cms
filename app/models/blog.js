@@ -10,6 +10,7 @@ const blogSchema = new mongoose.Schema({
   createdAt:{type:Date, default:Date.now},
   likes:{type: Number},
   dislikes:{type:Number},
+  imagePublicId: String, // this is line will used when we want to integrate our api using cloundinary
   
 
 

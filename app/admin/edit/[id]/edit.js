@@ -56,36 +56,41 @@ const Edit = ({id, result}) => {
     }
   }, [session, status])
 //send the updated value to backend
-const onSubmit= async(data) =>{
+const onSubmit = async (data) => {
   setLoading(true);
-  try{
+  try {
     const formdata = new FormData();
-    formdata.append('id',id);
-    formdata.append('title', data.title),
+    formdata.append('id', id);
+    formdata.append('title', data.title);
     formdata.append('description', data.description);
     formdata.append('category', data.category);
     formdata.append('author', data.author);
-    if(data.file?.[0]){
-      formdata.append('file',data.file[0]);
+
+    if (data.file?.[0]) {
+      formdata.append('file', data.file[0]);
     }
-    const request = await fetch('/api/blogapi',
-     {
-       method:"PUT",
+
+    const request = await fetch('/api/blogapi', {
+      method: "PUT",
       body: formdata
-     }
-    )
+    });
+
     const response = await request.json();
-    if(response.success){
-     toast.success("data updated successfully");
-     setTimeout(()=> router.push('/blogs'),1500)
-    }else{
-      toast.error(response.message || 'failed to update the record')
+
+    if (response.success) {
+      toast.success("Data updated successfully");
+      setTimeout(() => router.push('/blogs'), 1500);
+    } else {
+      toast.error(response.message || 'Failed to update the record');
     }
+  } catch (error) {
+    console.error("Update error:", error);
+    toast.error("Some error occurred while updating the data");
+  } finally {
+    setLoading(false);
   }
-  catch(error){
-   toast.error("some error in updating the data", error);
-  }
-}
+};
+
 
 
   return (
