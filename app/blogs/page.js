@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic"; // Add this line
+
 import React from 'react';
 import connectDB from '../lib/db';
 import Blog from '../models/blog';

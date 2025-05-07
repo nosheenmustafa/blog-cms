@@ -68,7 +68,7 @@ export async function PUT(request) {
     if (description) updateFields.description = description;
 
     // If new image is uploaded
-    if (file && file instanceof Blob) {
+    if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const base64String = buffer.toString("base64");
       const dataURI = `data:${file.type};base64,${base64String}`;
